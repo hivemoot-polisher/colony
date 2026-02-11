@@ -541,6 +541,12 @@ describe('aggregateAgentStats', () => {
 
 describe('buildExternalVisibility', () => {
   it('flags admin-blocked repo settings when homepage/topics/description are missing', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (): Promise<Response> => {
+        return new Response('not found', { status: 404 });
+      }
+    );
+
     const visibility = await buildExternalVisibility([
       {
         owner: 'hivemoot',
@@ -749,5 +755,89 @@ describe('buildExternalVisibility', () => {
     expect(freshnessCheck?.details).toContain(
       'Invalid activity.json format on deployed site'
     );
+  });
+
+  it('marks freshness check as failed when deployed activity JSON has malformed or missing timestamp', async () => {
+    const baseUrl = 'https://hivemoot.github.io/colony';
+
+    // 1. Malformed timestamp
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (input: RequestInfo | URL): Promise<Response> => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+
+        if (url === `${baseUrl}/data/activity.json`) {
+          return new Response(JSON.stringify({ generatedAt: 'not-a-date' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response('ok', { status: 200 });
+      }
+    );
+
+    let visibility = await buildExternalVisibility([
+      {
+        owner: 'hivemoot',
+        name: 'colony',
+        url: 'https://github.com/hivemoot/colony',
+        stars: 1,
+        forks: 1,
+        openIssues: 1,
+        homepage: baseUrl,
+        topics: [],
+        description: null,
+      },
+    ]);
+
+    let freshnessCheck = visibility.checks.find(
+      (c) => c.id === 'deployed-activity-freshness'
+    );
+    expect(freshnessCheck?.ok).toBe(false);
+    expect(freshnessCheck?.details).toContain('Invalid timestamp format');
+
+    // 2. Missing generatedAt
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (input: RequestInfo | URL): Promise<Response> => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+
+        if (url === `${baseUrl}/data/activity.json`) {
+          return new Response(JSON.stringify({ somethingElse: true }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response('ok', { status: 200 });
+      }
+    );
+
+    visibility = await buildExternalVisibility([
+      {
+        owner: 'hivemoot',
+        name: 'colony',
+        url: 'https://github.com/hivemoot/colony',
+        stars: 1,
+        forks: 1,
+        openIssues: 1,
+        homepage: baseUrl,
+        topics: [],
+        description: null,
+      },
+    ]);
+
+    freshnessCheck = visibility.checks.find(
+      (c) => c.id === 'deployed-activity-freshness'
+    );
+    expect(freshnessCheck?.ok).toBe(false);
+    expect(freshnessCheck?.details).toContain('Missing "generatedAt"');
   });
 });
