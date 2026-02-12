@@ -57,6 +57,34 @@ function normalizeUrlForMatch(value: string): string {
   return value.replace(/\/+$/, '').toLowerCase();
 }
 
+function extractTagAttribute(
+  html: string,
+  tag: string,
+  requiredAttributes: Array<[name: string, value: string]>,
+  targetAttribute: string
+): string {
+  const tagRegex = new RegExp(`<${tag}\\b[^>]*>`, 'gi');
+  const tags = html.match(tagRegex) ?? [];
+
+  for (const currentTag of tags) {
+    const hasRequiredAttributes = requiredAttributes.every(([name, value]) =>
+      new RegExp(`${name}\\s*=\\s*["']${value}["']`, 'i').test(currentTag)
+    );
+    if (!hasRequiredAttributes) {
+      continue;
+    }
+
+    const targetMatch = currentTag.match(
+      new RegExp(`${targetAttribute}\\s*=\\s*["']([^"']+)["']`, 'i')
+    );
+    if (targetMatch?.[1]) {
+      return targetMatch[1].trim();
+    }
+  }
+
+  return '';
+}
+
 async function runChecks(): Promise<CheckResult[]> {
   const indexHtml = readIfExists(INDEX_HTML_PATH);
   const sitemapXml = readIfExists(SITEMAP_PATH);
@@ -180,10 +208,12 @@ async function runChecks(): Promise<CheckResult[]> {
     ok: deployedJsonLd,
   });
 
-  const canonicalMatch = deployedRootHtml.match(
-    /<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i
+  const canonicalUrl = extractTagAttribute(
+    deployedRootHtml,
+    'link',
+    [['rel', 'canonical']],
+    'href'
   );
-  const canonicalUrl = canonicalMatch?.[1]?.trim() ?? '';
   const expectedCanonical = `${baseUrl}/`;
   const hasCanonicalParity =
     canonicalUrl.length > 0 &&
@@ -199,10 +229,12 @@ async function runChecks(): Promise<CheckResult[]> {
         : 'Missing canonical link on deployed homepage',
   });
 
-  const ogImageMatch = deployedRootHtml.match(
-    /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i
+  const ogImageRaw = extractTagAttribute(
+    deployedRootHtml,
+    'meta',
+    [['property', 'og:image']],
+    'content'
   );
-  const ogImageRaw = ogImageMatch?.[1]?.trim() ?? '';
   let ogImageUrl = '';
   if (ogImageRaw) {
     try {

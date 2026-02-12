@@ -910,6 +910,34 @@ function normalizeUrlForMatch(value: string): string {
   return value.replace(/\/+$/, '').toLowerCase();
 }
 
+function extractTagAttribute(
+  html: string,
+  tag: string,
+  requiredAttributes: Array<[name: string, value: string]>,
+  targetAttribute: string
+): string {
+  const tagRegex = new RegExp(`<${tag}\\b[^>]*>`, 'gi');
+  const tags = html.match(tagRegex) ?? [];
+
+  for (const currentTag of tags) {
+    const hasRequiredAttributes = requiredAttributes.every(([name, value]) =>
+      new RegExp(`${name}\\s*=\\s*["']${value}["']`, 'i').test(currentTag)
+    );
+    if (!hasRequiredAttributes) {
+      continue;
+    }
+
+    const targetMatch = currentTag.match(
+      new RegExp(`${targetAttribute}\\s*=\\s*["']([^"']+)["']`, 'i')
+    );
+    if (targetMatch?.[1]) {
+      return targetMatch[1].trim();
+    }
+  }
+
+  return '';
+}
+
 export async function buildExternalVisibility(
   repositories: RepositoryInfo[]
 ): Promise<ExternalVisibility> {
@@ -1050,10 +1078,12 @@ export async function buildExternalVisibility(
       : 'Missing JSON-LD on deployed homepage',
   });
 
-  const canonicalMatch = deployedRootHtml.match(
-    /<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i
+  const canonicalUrl = extractTagAttribute(
+    deployedRootHtml,
+    'link',
+    [['rel', 'canonical']],
+    'href'
   );
-  const canonicalUrl = canonicalMatch?.[1]?.trim() ?? '';
   const expectedCanonical = `${baseUrl}/`;
   const hasCanonicalParity =
     canonicalUrl.length > 0 &&
@@ -1070,10 +1100,12 @@ export async function buildExternalVisibility(
         : 'Missing canonical link on deployed homepage',
   });
 
-  const ogImageMatch = deployedRootHtml.match(
-    /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i
+  const ogImageRaw = extractTagAttribute(
+    deployedRootHtml,
+    'meta',
+    [['property', 'og:image']],
+    'content'
   );
-  const ogImageRaw = ogImageMatch?.[1]?.trim() ?? '';
   let ogImageUrl = '';
   if (ogImageRaw) {
     try {
