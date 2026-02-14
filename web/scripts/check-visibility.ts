@@ -42,39 +42,39 @@ export function validateOpenGraphDimensions(
   widthRaw: string,
   heightRaw: string
 ): { ok: boolean; details: string } {
-  const width = Number.parseInt(widthRaw, 10);
-  const height = Number.parseInt(heightRaw, 10);
-  const hasDeclaredDimensions =
-    Number.isInteger(width) &&
-    Number.isInteger(height) &&
-    width > 0 &&
-    height > 0;
+  const trimmedWidth = widthRaw.trim();
+  const trimmedHeight = heightRaw.trim();
+  const hasWidth = trimmedWidth.length > 0;
+  const hasHeight = trimmedHeight.length > 0;
 
-  if (!hasDeclaredDimensions) {
-    if (!widthRaw && !heightRaw) {
+  if (!hasWidth || !hasHeight) {
+    if (!hasWidth && !hasHeight) {
       return {
         ok: false,
         details: `Missing og:image:width and og:image:height metadata on deployed homepage. ${OPEN_GRAPH_DIMENSION_FIX_HINT}`,
       };
     }
-    if (!widthRaw) {
+    if (!hasWidth) {
       return {
         ok: false,
         details: `Missing og:image:width metadata on deployed homepage. ${OPEN_GRAPH_DIMENSION_FIX_HINT}`,
       };
     }
-    if (!heightRaw) {
-      return {
-        ok: false,
-        details: `Missing og:image:height metadata on deployed homepage. ${OPEN_GRAPH_DIMENSION_FIX_HINT}`,
-      };
-    }
+    return {
+      ok: false,
+      details: `Missing og:image:height metadata on deployed homepage. ${OPEN_GRAPH_DIMENSION_FIX_HINT}`,
+    };
+  }
+
+  if (!/^\d+$/.test(trimmedWidth) || !/^\d+$/.test(trimmedHeight)) {
     return {
       ok: false,
       details: `Invalid og:image dimension values: width=${widthRaw}, height=${heightRaw}. ${OPEN_GRAPH_DIMENSION_FIX_HINT}`,
     };
   }
 
+  const width = Number.parseInt(trimmedWidth, 10);
+  const height = Number.parseInt(trimmedHeight, 10);
   if (
     width < MIN_OPEN_GRAPH_IMAGE_WIDTH ||
     height < MIN_OPEN_GRAPH_IMAGE_HEIGHT
